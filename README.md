@@ -1,6 +1,16 @@
-# Cordyceps
+# Cordyceps — Rhino 7 fork
 
-**MCP server for Grasshopper.** Give AI agents or scripts direct control over your parametric design canvas and Rhino rendering tools.
+> **This is a fork.** Upstream is [brookstalley/cordyceps](https://github.com/brookstalley/cordyceps),
+> which targets **Rhino 8 / .NET 8** and is the version you want unless you are specifically stuck
+> on Rhino 7. This fork retargets to **Rhino 7 / .NET Framework 4.8** and is deliberately scoped to
+> the Grasshopper tools only — the Rhino-side scene and render tools are removed. See
+> [RHINO7-SPIKE.md](RHINO7-SPIKE.md) for what changed and why, and
+> [upstream issue #28](https://github.com/brookstalley/cordyceps/issues/28) for the net48 discussion.
+>
+> Do **not** install the upstream `.gha` against Rhino 7, and do not install this one against
+> Rhino 8. They are built for different runtimes.
+
+**MCP server for Grasshopper.** Give AI agents or scripts direct control over your parametric design canvas.
 
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) provides a standardized interface for controlling applications — whether from AI assistants or your own code.
 
@@ -13,23 +23,19 @@
 
 ## Requirements
 
-- **Rhino 8.21+** (requires .NET 8)
+- **Rhino 7** (.NET Framework 4.8 on Windows, Mono on macOS). Verified against 7.38.24338.17002.
 - **For AI use**: Claude Desktop, Claude Code, Cursor, VS Code, or any MCP-compatible assistant
 - **For scripting**: Any MCP client library ([Python](https://github.com/modelcontextprotocol/python-sdk), [TypeScript](https://github.com/modelcontextprotocol/typescript-sdk), etc.)
 
 ## Installation
 
-### Rhino Package Manager (recommended)
-
-1. In Rhino 8, run the **`PackageManager`** command (or *Tools → Package Manager*)
-2. Search for **Cordyceps** and click **Install**
-3. Restart Rhino
-
-The Package Manager downloads the plugin, places it in the right folder, and unblocks it for you — and future updates are one click.
+This fork is **not** published to the Rhino Package Manager (Yak). Build it, or use the `.gha`
+committed to `releases/` on this branch. The Package Manager entry named "Cordyceps" is upstream's
+Rhino 8 build and will not load in Rhino 7.
 
 ### Manual install
 
-1. **[Download Cordyceps.gha](https://github.com/brookstalley/cordyceps/raw/main/releases/Cordyceps.gha)** (or grab it from the [latest release](https://github.com/brookstalley/cordyceps/releases/latest))
+1. Build it (see [Building](#building)), or take `releases/Cordyceps.gha` from this branch
 
 2. Copy to your Grasshopper components folder:
    *File → Special Folders → Components Folder*
@@ -139,7 +145,9 @@ See the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) for
 
 ## Tools
 
-Cordyceps provides **7 tools with over 100 actions** — consolidated to minimize context window usage. Related operations are grouped under a single tool with an `action` parameter.
+This fork provides **5 tools** — the Grasshopper set only. Related operations are grouped under a
+single tool with an `action` parameter to minimise context window usage. Upstream additionally ships
+`rhino_scene` and `rhino_render`; both are removed here (see RHINO7-SPIKE.md for the rationale).
 
 ### Grasshopper
 
@@ -153,10 +161,9 @@ Cordyceps provides **7 tools with over 100 actions** — consolidated to minimiz
 
 ### Rhino
 
-| Tool | Description |
-|------|-------------|
-| `rhino_scene` | Objects, layers, selection, visibility |
-| `rhino_render` | Viewport, camera, materials, lighting, environments, render |
+Removed in this fork. `rhino_scene` and `rhino_render` were the largest and most Rhino-8-coupled
+part of the codebase (~2,830 LOC, heavy `RenderContent`/PBR use) and were not needed for the
+GhPython workflow this fork exists to serve. Use upstream on Rhino 8 if you want them.
 
 ## Documentation
 
@@ -168,7 +175,8 @@ Browse the documentation directly: [`src/Cordyceps/Knowledge/`](src/Cordyceps/Kn
 
 | Problem | Solution |
 |---------|----------|
-| Plugin won't load | Verify Rhino 8.21+. If you installed manually, unblock the .gha file (Windows) or clear its quarantine flag (macOS) — the Package Manager does this for you. |
+| Plugin won't load | Verify you are on Rhino 7 and that this is the Rhino 7 build, not upstream's. Unblock the .gha (Windows) or clear its quarantine flag (macOS): `xattr -dr com.apple.quarantine <path>`. |
+| Script component not found | This fork resolves `python` / `ghpython` to Rhino 7's **GhPython Script** component (`Math` > `Script`, reported category `Maths`). Rhino 8's "Python 3 Script" does not exist here. |
 | Can't connect | Ensure Cordyceps component is on canvas. Check the port. |
 | Claude Desktop can't connect | Ensure Node.js is installed. Check Rhino is running with Cordyceps. Restart Claude Desktop after config changes. |
 | Component not found | Use `gh_canvas(action='search', query='...')` to find exact names. |
@@ -180,8 +188,12 @@ Browse the documentation directly: [`src/Cordyceps/Knowledge/`](src/Cordyceps/Kn
 dotnet build src/Cordyceps/Cordyceps.csproj -c Release
 ```
 
-Only Release builds are supported — a Debug build (the `dotnet build` default) fails with an error.
+Only Release builds are supported — a Debug build fails with an explicit error.
+
+No .NET Framework Developer Pack is required, on any platform: the net48 reference assemblies come
+from the `Microsoft.NETFramework.ReferenceAssemblies.net48` NuGet package. The output cannot *run*
+under the .NET SDK on macOS, which is fine — Rhino 7's own Mono runtime executes it.
 
 ---
 
-[Changelog](CHANGELOG.md) · Inspired by [grasshopper-mcp](https://github.com/alfredatnycu/grasshopper-mcp) by Alfred Chen · MIT License
+[Changelog](CHANGELOG.md) · [Rhino 7 fork notes](RHINO7-SPIKE.md) · Upstream: [brookstalley/cordyceps](https://github.com/brookstalley/cordyceps) by Brooks Talley · Inspired by [grasshopper-mcp](https://github.com/alfredatnycu/grasshopper-mcp) by Alfred Chen · MIT License
