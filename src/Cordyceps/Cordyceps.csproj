@@ -1,8 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Cross-platform Rhino 8.21+ (macOS + Windows) - .NET 8 for MCP SDK -->
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Rhino 7 (macOS Mono + Windows .NET Framework 4.8) -->
+    <TargetFramework>net48</TargetFramework>
+    <!-- C# 9 for switch expressions, `or`/type patterns, and target-typed conditionals.
+         All are compiler-only features that emit fine against net48. Records and init-only
+         setters WOULD need an IsExternalInit shim; the codebase uses neither. -->
+    <LangVersion>9.0</LangVersion>
     <OutputType>Library</OutputType>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <TargetExt>.gha</TargetExt>
@@ -15,6 +19,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Cordyceps.Tests" />
   </ItemGroup>
+
+
 
   <!-- Block Debug builds with a clear error message -->
   <Target Name="BlockDebugBuilds" BeforeTargets="Build" Condition=" '$(Configuration)' != 'Release' ">
@@ -39,8 +45,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Grasshopper (Rhino 8) -->
-    <PackageReference Include="Grasshopper" Version="8.0.23304.9001" ExcludeAssets="runtime" />
+    <!-- Grasshopper (Rhino 7) -->
+    <PackageReference Include="Grasshopper" Version="7.13.21348.13001" ExcludeAssets="runtime" />
 
     <!-- JSON serialization -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -48,9 +54,11 @@
 
   <!-- Reference WinForms for cross-platform .NET 7.0 -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" ExcludeAssets="all" GeneratePathProperty="true" />
-    <Reference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)\build\.NETFramework\v4.8\System.Windows.Forms.dll" Private="False" />
-    <PackageReference Include="System.Drawing.Common" Version="8.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" GeneratePathProperty="true" />
+    <Reference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)/build/.NETFramework/v4.8/System.Windows.Forms.dll" Private="False" />
+    <!-- `dynamic` call sites bind through Microsoft.CSharp.RuntimeBinder at runtime. -->
+    <Reference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)/build/.NETFramework/v4.8/Microsoft.CSharp.dll" Private="False" />
+    
   </ItemGroup>
 
   <!-- Component icon -->
@@ -82,7 +90,7 @@
   <!-- Post-build: Copy .gha to releases folder for Grasshopper to load -->
   <Target Name="CopyToReleases" AfterTargets="Build">
     <PropertyGroup>
-      <ReleasesFolder>$(MSBuildProjectDirectory)\..\..\releases</ReleasesFolder>
+      <ReleasesFolder>$(MSBuildProjectDirectory)/../../releases</ReleasesFolder>
     </PropertyGroup>
     <MakeDir Directories="$(ReleasesFolder)" Condition="!Exists('$(ReleasesFolder)')" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ReleasesFolder)" />

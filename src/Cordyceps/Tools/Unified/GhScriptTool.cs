@@ -42,8 +42,7 @@ namespace Cordyceps.Tools.Unified
                         "Params matching by name keep their wires (LCS diffing)",
                         "Renamed/removed params lose connections — reported in lostConnections",
                         "Use gh_wire(action='connect', connections='<lostConnections>') to restore",
-                        "Script language is preserved automatically; start code with '#! python 3' or '// #! csharp' to set it explicitly",
-                        "A bare unified 'Script' component (no language picked) returns a languageWarning until code starts with a directive — add '#! python 3' or '// #! csharp'"
+                        "GhPython components are IronPython 2.7 — write Python 2 syntax (print is a statement, no f-strings)"
                     }
                 },
                 ["configure"] = new ActionInfo
@@ -58,8 +57,7 @@ namespace Cordyceps.Tools.Unified
                         "Partial update: omit a side (don't pass inputs/outputs) to leave it untouched; pass [] to clear that side. Passing inputs without outputs no longer wipes outputs.",
                         "Malformed inputs/outputs JSON is rejected with an error before anything changes — it is never treated as an empty array",
                         "Params matching by name keep their wires (like 'set'); renamed/removed params lose connections, reported in lostConnections — pass it to gh_wire(action='connect') to restore",
-                        "Script language is preserved automatically; start code with '#! python 3' or '// #! csharp' to set it explicitly",
-                        "A bare unified 'Script' component (no language picked) returns a languageWarning until code starts with a directive — add '#! python 3' or '// #! csharp'",
+                        "GhPython components are IronPython 2.7 — write Python 2 syntax (print is a statement, no f-strings)",
                         "When 'code' is provided the response includes codeSet (bool); if setting the source fails after params were applied, success is false, codeSet=false, and sourceError holds the reason — the params DID change"
                     }
                 },
@@ -78,7 +76,7 @@ namespace Cordyceps.Tools.Unified
             },
             Notes = new[]
             {
-                "Works with C# Script and Python 3 Script components",
+                "Works with the Rhino 7 GhPython Script component (IronPython 2.7)",
                 "access values: 'item' (default), 'list', 'tree'"
             }
         };
@@ -171,7 +169,8 @@ namespace Cordyceps.Tools.Unified
                     dynamic scriptComp = component;
 
                     var finalSource = PreserveLanguageDirective(component, code);
-                    scriptComp.SetSource(finalSource);
+                    if (!TrySetScriptSource(component, finalSource, out var setErr))
+                        return ToolHelpers.ErrorResponse(setErr);
 
                     // Surgically sync params instead of SetParametersFromScript(),
                     // which rebuilds all params and destroys cluster input hooks.
@@ -217,9 +216,6 @@ namespace Cordyceps.Tools.Unified
                     // compiles to nothing ("Can not determine input code language") — and SetSource
                     // reports no error. The failure only surfaces at solve time, which we can't observe
                     // here without forcing a (cluster-unsafe) recompute, so flag it up front (issue #15).
-                    var languageWarning = ScriptDirective.LanguageWarning(component.GetType().Name, finalSource);
-                    if (languageWarning != null)
-                        response["languageWarning"] = languageWarning;
 
                     if (lostConnections != null)
                     {
@@ -264,7 +260,6 @@ namespace Cordyceps.Tools.Unified
 
                 bool configured = false;
                 string message = "";
-                string languageWarning = null;
                 List<object> lostConnections = null;
                 // Partial-apply detectability: when 'code' is provided, codeSet records whether
                 // SetSource succeeded and sourceError carries the failure, so a params-applied /
@@ -291,8 +286,8 @@ namespace Cordyceps.Tools.Unified
                             try
                             {
                                 var finalSource = PreserveLanguageDirective(component, code);
-                                scriptComp.SetSource(finalSource);
-                                languageWarning = ScriptDirective.LanguageWarning(component.GetType().Name, finalSource);
+                                if (!TrySetScriptSource(component, finalSource, out var setErr))
+                        return ToolHelpers.ErrorResponse(setErr);
                                 codeSet = true;
                                 message += ", source set";
                             }
@@ -320,8 +315,8 @@ namespace Cordyceps.Tools.Unified
                         try
                         {
                             var finalSource = PreserveLanguageDirective(component, code);
-                            scriptComp.SetSource(finalSource);
-                            languageWarning = ScriptDirective.LanguageWarning(component.GetType().Name, finalSource);
+                            if (!TrySetScriptSource(component, finalSource, out var setErr))
+                        return ToolHelpers.ErrorResponse(setErr);
                             // Best-effort param sync after SetSource: not all script-component types
                             // expose every hook, so a failure here is non-fatal — log at Debug and continue.
                             try { SyncScriptParams(component, code, out _); }
@@ -379,8 +374,6 @@ namespace Cordyceps.Tools.Unified
                     configureResponse["codeSet"] = codeSet.Value;
                 if (sourceError != null)
                     configureResponse["sourceError"] = sourceError;
-                if (languageWarning != null)
-                    configureResponse["languageWarning"] = languageWarning;
 
                 // Same lostConnections contract as 'set': removed-param wires are returned so the
                 // caller can restore them with gh_wire(action='connect') (GHS-3W9N).
@@ -733,6 +726,78 @@ namespace Cordyceps.Tools.Unified
             return null;
         }
 
+
+        /// <summary>
+        /// Write source onto a script component, trying each known mechanism in turn.
+        ///
+        /// <para>This mirrors the probe cascade <see cref="TryGetScriptSource"/> already uses on the
+        /// read side. Rhino 8's script components expose <c>SetSource(string)</c>; Rhino 7's GhPython
+        /// component does not — it exposes a public <c>Code</c> setter instead
+        /// (<c>GhPython.Component.ScriptingAncestorComponent</c>). Verified against the shipped
+        /// GhPython.gha 7.38.24338.17002: the setter is public, clears the compiled-code cache so the
+        /// component recompiles, and throws <see cref="InvalidOperationException"/> when the component
+        /// has a visible <c>code</c> input parameter.</para>
+        /// </summary>
+        private static bool TrySetScriptSource(IGH_DocumentObject component, string source, out string error)
+        {
+            error = null;
+
+            // Rhino 8 unified / dedicated script components.
+            var setSource = component.GetType().GetMethod("SetSource", new[] { typeof(string) });
+            if (setSource != null)
+            {
+                try
+                {
+                    setSource.Invoke(component, new object[] { source });
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Debug($"TrySetScriptSource: SetSource() failed: {ex.Message}");
+                }
+            }
+
+            // Rhino 7 GhPython. Check HiddenCodeInput FIRST: the Code setter throws when the code
+            // input parameter is visible, and the raw exception is opaque to the caller.
+            var hiddenProp = component.GetType().GetProperty("HiddenCodeInput");
+            if (hiddenProp != null)
+            {
+                try
+                {
+                    if (hiddenProp.GetValue(component) is bool hidden && !hidden)
+                    {
+                        error = "This GhPython component has a visible 'code' input parameter, so its "
+                              + "source cannot be set programmatically. Right-click the component and "
+                              + "turn off the code input, then retry.";
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Debug($"TrySetScriptSource: HiddenCodeInput probe failed: {ex.Message}");
+                }
+            }
+
+            var codeProp = component.GetType().GetProperty("Code");
+            if (codeProp != null && codeProp.CanWrite)
+            {
+                try
+                {
+                    codeProp.SetValue(component, source);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    error = $"Code setter threw: {ex.InnerException?.Message ?? ex.Message}";
+                    return false;
+                }
+            }
+
+            error = "Component exposes neither SetSource(string) nor a writable Code property "
+                  + $"(type: {component.GetType().Name}).";
+            return false;
+        }
+
         /// <summary>
         /// Preserve the script component's Rhino 8 language directive (e.g. "#! python 3",
         /// "// #! csharp") when <paramref name="code"/> omits it. SetSource() replaces the whole
@@ -740,8 +805,11 @@ namespace Cordyceps.Tools.Unified
         /// cause "Can not determine input code language" at solve time. A directive already
         /// present in <paramref name="code"/> is respected as-is.
         /// </summary>
+        // Rhino 7's GhPython component carries a concrete language (IronPython 2.7), so there is
+        // no first-line language directive to preserve. Rhino 8's unified Script component infers
+        // its language from one; that logic lives upstream and is not applicable here.
         private string PreserveLanguageDirective(IGH_DocumentObject component, string code)
-            => ScriptDirective.Preserve(TryGetScriptSource(component), code);
+            => code;
 
         /// <summary>
         /// Configure-path parameter sync. Reshapes only the <em>provided</em> sides (a null def list

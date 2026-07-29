@@ -6,8 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordyceps.Core;
@@ -437,7 +436,7 @@ namespace Cordyceps
 
             var uptimeSeconds = (int)(DateTime.UtcNow - _startTime).TotalSeconds;
 
-            var health = JsonSerializer.Serialize(new
+            var health = Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
                 status = "ok",
                 server = "Cordyceps MCP",
@@ -500,18 +499,17 @@ namespace Cordyceps
 
                 Core.DebugLog.WriteLine($"Received: {json.Substring(0, Math.Min(LOG_TRUNCATE_LENGTH, json.Length))}...", "INFO", 1);
 
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+                var root = JObject.Parse(json);
 
-                var method = root.TryGetProperty("method", out var m) ? m.GetString() : null;
-                var paramsEl = root.TryGetProperty("params", out var p) ? p : default;
+                var method = root.TryGetValue("method", out var m) ? m.Value<string>() : null;
+                var paramsEl = root.TryGetValue("params", out var p) ? p : null;
 
                 // Notification detection and lossless id echo live in Core.JsonRpcEnvelope
                 // (host-free, unit-tested): notifications are ABSENT-id only ("id": null still
                 // gets a response), and the id is computed BEFORE dispatch so a malformed id can
                 // never destroy the response after the tool's side effects ran.
                 bool isNotification = Core.JsonRpcEnvelope.IsNotification(root);
-                JsonElement? responseId = Core.JsonRpcEnvelope.EchoId(root);
+                JToken responseId = Core.JsonRpcEnvelope.EchoId(root);
 
                 object result = null;
                 string errorMessage = null;
@@ -567,7 +565,7 @@ namespace Cordyceps
         /// <summary>
         /// Dispatch a JSON-RPC method
         /// </summary>
-        private async Task<object> DispatchMethodAsync(string method, JsonElement paramsEl)
+        private async Task<object> DispatchMethodAsync(string method, JToken paramsEl)
         {
             switch (method)
             {
@@ -661,10 +659,10 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
             return new { tools };
         }
 
-        private async Task<object> HandleToolCallAsync(JsonElement paramsEl)
+        private async Task<object> HandleToolCallAsync(JToken paramsEl)
         {
-            var name = paramsEl.GetProperty("name").GetString();
-            var arguments = paramsEl.TryGetProperty("arguments", out var a) ? a : default;
+            var name = (paramsEl as JObject)?["name"]?.Value<string>();
+            var arguments = (paramsEl as JObject)?["arguments"];
 
             // Capture the context once. Stop() releases _context during teardown; a handler still
             // in flight then would otherwise hand a null context to the tool and NRE. Capturing a
@@ -704,8 +702,8 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
                 for (int i = 0; i < methodParams.Length; i++)
                 {
                     var param = methodParams[i];
-                    if (arguments.ValueKind == JsonValueKind.Object &&
-                        arguments.TryGetProperty(param.Name, out var argVal))
+                    if (arguments is JObject argsObj &&
+                        argsObj.TryGetValue(param.Name, out var argVal))
                     {
                         args[i] = ConvertJsonValue(argVal, param.ParameterType);
                     }
@@ -766,9 +764,9 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
         /// <summary>
         /// Handle resources/read request
         /// </summary>
-        private object HandleResourcesRead(JsonElement paramsEl)
+        private object HandleResourcesRead(JToken paramsEl)
         {
-            var uri = paramsEl.TryGetProperty("uri", out var u) ? u.GetString() : null;
+            var uri = (paramsEl as JObject)?["uri"]?.Value<string>();
 
             if (string.IsNullOrEmpty(uri))
             {
@@ -808,9 +806,9 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
         /// <summary>
         /// Handle prompts/get request
         /// </summary>
-        private object HandlePromptsGet(JsonElement paramsEl)
+        private object HandlePromptsGet(JToken paramsEl)
         {
-            var name = paramsEl.TryGetProperty("name", out var n) ? n.GetString() : null;
+            var name = (paramsEl as JObject)?["name"]?.Value<string>();
 
             if (string.IsNullOrEmpty(name))
             {
@@ -819,11 +817,13 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
 
             // Extract arguments if provided
             var arguments = new Dictionary<string, string>();
-            if (paramsEl.TryGetProperty("arguments", out var argsEl) && argsEl.ValueKind == JsonValueKind.Object)
+            if (paramsEl is JObject pObj && pObj.TryGetValue("arguments", out var argsEl) && argsEl is JObject argsObj)
             {
-                foreach (var prop in argsEl.EnumerateObject())
+                foreach (var prop in argsObj.Properties())
                 {
-                    arguments[prop.Name] = prop.Value.GetString() ?? "";
+                    arguments[prop.Name] = prop.Value.Type == JTokenType.String
+                        ? prop.Value.Value<string>()
+                        : prop.Value.ToString(Newtonsoft.Json.Formatting.None);
                 }
             }
 
@@ -852,7 +852,7 @@ Resources: gh://docs/getting-started, gh://docs/data-trees, gh://docs/common-err
             };
         }
 
-        private static object ConvertJsonValue(JsonElement element, Type targetType) => Core.JsonTypeConverter.ConvertJsonValue(element, targetType);
+        private static object ConvertJsonValue(JToken element, Type targetType) => Core.JsonTypeConverter.ConvertJsonValue(element, targetType);
 
         /// <summary>
         /// Record that a command was executed

@@ -24,9 +24,9 @@ namespace Cordyceps.Core
             { "c#", "C# Script" },
             { "csharp", "C# Script" },
             { "csharp script", "C# Script" },
-            { "python", "Python 3 Script" },
-            { "python script", "Python 3 Script" },
-            { "ghpython", "Python 3 Script" },
+            { "python", "GhPython Script" },
+            { "python script", "GhPython Script" },
+            { "ghpython", "GhPython Script" },
 
             // Planes
             { "plane", "XY Plane" },
@@ -64,7 +64,10 @@ namespace Cordyceps.Core
         private static readonly Dictionary<string, Guid> KnownGuids = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
         {
             { "C# Script", new Guid("b6ba1144-02d6-4a2d-b53c-ec62e290eeb7") },
-            { "Python 3 Script", new Guid("c9b2d725-6f87-4b07-af90-bd9aefef68eb") },
+            // GhPython.Component.ZuiPythonComponent. GUID read from the GuidAttribute on the
+            // component class in the shipped GhPython.gha (Rhino 7.38.24338.17002).
+            // Identity: Name="GhPython Script", NickName="Python", Category="Math", SubCategory="Script".
+            { "GhPython Script", new Guid("410755B1-224A-4C1E-A407-BF32FB45EA7E") },
             { "Stream Filter", new Guid("fb97f83d-9f77-4c6c-b134-1ddfec17e8aa") },
         };
 
@@ -371,7 +374,7 @@ namespace Cordyceps.Core
             ToolHelpers.WithProxyComponent(proxy, comp =>
             {
                 // Also check if type name contains OBSOLETE
-                if (!match.Deprecated && comp.GetType().Name.Contains("OBSOLETE", StringComparison.OrdinalIgnoreCase))
+                if (!match.Deprecated && comp.GetType().Name.IndexOf("OBSOLETE", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     match.Deprecated = true;
                 }
