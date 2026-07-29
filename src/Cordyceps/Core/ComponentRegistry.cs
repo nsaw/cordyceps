@@ -66,7 +66,10 @@ namespace Cordyceps.Core
             { "C# Script", new Guid("b6ba1144-02d6-4a2d-b53c-ec62e290eeb7") },
             // GhPython.Component.ZuiPythonComponent. GUID read from the GuidAttribute on the
             // component class in the shipped GhPython.gha (Rhino 7.38.24338.17002).
-            // Identity: Name="GhPython Script", NickName="Python", Category="Math", SubCategory="Script".
+            // Identity: Name="GhPython Script", NickName="Python", SubCategory="Script".
+            // Category: the ctor passes "Math", but Grasshopper canonicalizes it at runtime and
+            // reports "Maths". Verified live against Rhino 7.38 -- so the Category/Name
+            // disambiguation form is "Maths/GhPython Script", not "Math/...".
             { "GhPython Script", new Guid("410755B1-224A-4C1E-A407-BF32FB45EA7E") },
             { "Stream Filter", new Guid("fb97f83d-9f77-4c6c-b134-1ddfec17e8aa") },
         };

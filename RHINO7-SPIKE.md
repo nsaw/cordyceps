@@ -20,7 +20,7 @@ net48 question.
 | `Cordyceps.csproj` | Added `Microsoft.CSharp` reference | `dynamic` call sites bind through `Microsoft.CSharp.RuntimeBinder`, which is not referenced by default on net48. |
 | `Cordyceps.csproj` | Backslash paths → forward slashes | The WinForms reference and the releases-copy target used Windows-only separators. |
 | `McpServer.cs`, `Core/JsonRpcEnvelope.cs`, `Core/JsonTypeConverter.cs` | System.Text.Json → Newtonsoft | **See below.** |
-| `Core/ComponentRegistry.cs` | Script aliases → `GhPython Script`, GUID `410755B1-224A-4C1E-A407-BF32FB45EA7E` | Rhino 7 has no "Python 3 Script". Identity read from the `GuidAttribute` on `ZuiPythonComponent` in the shipped `GhPython.gha` 7.38.24338.17002: `Name="GhPython Script"`, `NickName="Python"`, `Category="Math"`, `SubCategory="Script"`. |
+| `Core/ComponentRegistry.cs` | Script aliases → `GhPython Script`, GUID `410755B1-224A-4C1E-A407-BF32FB45EA7E` | Rhino 7 has no "Python 3 Script". Identity read from the `GuidAttribute` on `ZuiPythonComponent` in the shipped `GhPython.gha` 7.38.24338.17002: `Name="GhPython Script"`, `NickName="Python"`, `SubCategory="Script"`. The ctor passes `Category="Math"`, but Grasshopper canonicalizes it and reports **`Maths`** at runtime, so the disambiguation form is `Maths/GhPython Script`. |
 | `Core/ComponentRegistry.cs` | `Contains(s, StringComparison)` → `IndexOf(...) >= 0` | That overload does not exist on net48. |
 | `Tools/Unified/GhScriptTool.cs` | Added `TrySetScriptSource` cascade | **See below.** |
 | `Core/ScriptDirective.cs` | Removed | Rhino 8's unified Script component infers language from a `#!` first line. Rhino 7's GhPython carries a concrete language, so there is nothing to preserve. |
@@ -100,6 +100,23 @@ then `xattr -dr com.apple.quarantine <path>` and restart Rhino.
 
 ## Status
 
-Builds clean and deploys. The in-Rhino round trip (add a GhPython component, set source, read
-the traceback back through `gh_inspect(action='reports')`) has **not** been run yet — that needs
-a Rhino session with an MCP client attached.
+**Validated end to end in Rhino 7.38 on macOS.**
+
+The plugin loads (appears in the Grasshopper search box with its icon), and placing the component
+starts the server: `Cordyceps [INFO]: MCP server started on http://127.0.0.1:26929/mcp`.
+`/health` reports `toolCount: 5`.
+
+The full loop, driven over the HTTP endpoint:
+
+| Step | Call | Result |
+|---|---|---|
+| 1 | `gh_canvas(action='add', type='ghpython')` | `{"success":true,"type":"GhPython Script","nickname":"Python"}` — the repointed registry alias resolves |
+| 2 | `gh_script(action='set', code="print 'hello from rhino 7'")` | `{"success":true,"codeSet":true}` — the `Code` fallback in `TrySetScriptSource` works |
+| 3 | `gh_inspect(action='reports')` | `"report":"hello from rhino 7"` — print output returns via the `out` param |
+| 4 | set code with an undefined name, then `gh_inspect(action='reports')` | `"Runtime error (UnboundNameException): name 'undefined_variable' is not defined\n\nTraceback:\n  line 2, in script"` |
+
+`gh_inspect(action='status')` independently reports the failing component as
+`"status":"ERROR"`, and `gh_script(action='get')` round-trips the source back verbatim.
+
+Step 4 is the point of the spike: the write-code / read-error cycle closes without touching
+the Rhino UI.
