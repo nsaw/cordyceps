@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Cordyceps is a Grasshopper plugin that exposes Grasshopper and Rhino functionality via the Model Context Protocol (MCP). It allows AI assistants to programmatically control Grasshopper (adding components, creating connections, configuring scripts) and Rhino (managing objects, layers, materials, rendering).
+Cordyceps is a Grasshopper plugin that exposes Grasshopper functionality via the Model Context Protocol (MCP). It allows AI assistants to programmatically control Grasshopper (adding components, creating connections, configuring scripts). On this `rhino7-spike` branch the Rhino-side tools are removed; see `RHINO7-SPIKE.md`.
 
 ## Build Commands
 
@@ -15,7 +15,7 @@ dotnet build src/Cordyceps/Cordyceps.csproj -c Release
 # The built .gha file is automatically copied to releases/
 ```
 
-The project targets .NET 8.0 and outputs a Grasshopper plugin (`.gha` file). Debug builds are blocked—always use `-c Release`.
+The project targets .NET Framework 4.8 (`net48`, Rhino 7) and outputs a Grasshopper plugin (`.gha` file). Debug builds are blocked; always use `-c Release`.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ The project targets .NET 8.0 and outputs a Grasshopper plugin (`.gha` file). Deb
 
 **Core/GrasshopperContext.cs** - Thread-safe wrapper for Grasshopper document access. All Grasshopper operations must run on the UI thread; this class provides `ExecuteOnUiThread()` methods that marshal calls correctly.
 
-**Core/ComponentRegistry.cs** - Resolves component type names to actual Grasshopper components. Handles aliases (e.g., "python" -> "Python 3 Script") and supports creation by name or GUID.
+**Core/ComponentRegistry.cs** - Resolves component type names to actual Grasshopper components. Handles aliases (e.g., "python" -> "GhPython Script") and supports creation by name or GUID.
 
 **Core/UnifiedToolHelpers.cs** - Shared utilities for the unified tool architecture including action dispatch, help generation, and standardized response formatting.
 
@@ -59,10 +59,6 @@ Each tool class is marked with `[McpServerToolType]` and contains a single metho
 - **GhDocumentTool** (`gh_document`) - Save, clear documents; snapshots; solver control; capture canvas/viewport
 - **GhScriptTool** (`gh_script`) - Configure C#/Python script components
 - **GhInspectTool** (`gh_inspect`) - Get component status, trace data flow, retrieve debug output
-
-**Rhino Tools (2):**
-- **RhinoSceneTool** (`rhino_scene`) - Object management, selection, layers (full CRUD), visibility
-- **RhinoRenderTool** (`rhino_render`) - Display modes, camera, render settings, materials, environments
 
 ### Adding or Modifying Tools
 
@@ -112,9 +108,9 @@ After any code change, check each of these and update as needed:
 
 ## Dependencies
 
-- Grasshopper 8.0+ (Rhino 8)
+- Grasshopper 7 SDK (`7.13.21348.13001`, Rhino 7)
 - Newtonsoft.Json for JSON serialization
-- .NET 8.0
+- .NET Framework 4.8 (`net48`)
 
 ## Branch model & Publishing
 
@@ -158,8 +154,7 @@ committed framework files. The principles, methodology, Critic protocol, and PR
 review live in the plugin and are read on demand (run `/prawduct:methodology`);
 they are intentionally not copied into this repo.
 
-**Before writing any code, STOP and read the build cycle: `/prawduct:building`.**
-Skipping it is the #1 governance failure.
+Read the build cycle (`/prawduct:building`) before writing code; it defines the plan the Stop hook checks.
 
 The hardest rules (everything else is in the plugin):
 
