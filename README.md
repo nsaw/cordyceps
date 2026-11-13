@@ -17,7 +17,7 @@
 ## Features
 
 - **Full Grasshopper control** — add components, wire connections, set values, manage groups
-- **Rhino integration** — bake geometry, manage layers, apply PBR materials, render scenes
+- **Bake to Rhino**: bake Grasshopper geometry into the Rhino document (`gh_canvas` `bake`); the Rhino scene and render tools are removed in this fork
 - **Natural language** — describe what you want and let AI build it
 - **Direct scripting** — call tools from Python or any MCP client, no AI required
 
