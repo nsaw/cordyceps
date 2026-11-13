@@ -39,7 +39,7 @@ The project targets .NET Framework 4.8 (`net48`, Rhino 7) and outputs a Grasshop
 
 AI agents discover Cordyceps through a layered documentation system. All of these are user-facing and must be kept in sync with code changes:
 
-**McpServer.cs `GetServerInstructions()`** - The first thing agents see on MCP initialize. Lists the tools with their actions, key points, and resource links. Must be updated when actions are added/removed/renamed. On this branch it still advertises the removed `rhino_scene` and `rhino_render` (`McpServer.cs:625-626`); that is a known defect, not a description of available tools.
+**McpServer.cs `GetServerInstructions()`** - The first thing agents see on MCP initialize. Lists the tools with their actions, key points, and resource links. Must be updated when actions are added/removed/renamed. On this branch its tool list still includes the removed `rhino_scene` and `rhino_render` lines; that is a known defect, not a description of available tools.
 
 **Knowledge/ (Embedded Guides)** - Markdown guides served as MCP resources (`gh://docs/*`, `gh://patterns/*`). Covers getting started, data trees, type system, best practices, component patterns, canvas layout, geometry orientation, rendering, common errors, and MCP testing. Registered in `Resources/ResourceRegistry.cs`. On this branch the rendering guide (`gh://docs/rendering`) and the `rhino_*` examples in `GettingStartedGuide.md` and `BestPracticesGuide.md` describe tools that are removed; do not follow them.
 
@@ -121,8 +121,9 @@ This fork is **not** published to the Rhino Package Manager (Yak) (README.md, In
 Yak entry named "Cordyceps" is upstream's Rhino 8 build. A Release build copies the `.gha` into
 `releases/`, and `releases/Cordyceps.gha` committed on this branch is the distribution.
 
-Do not run `scripts/release.sh publish` from this fork: it builds and pushes a Yak package and
-cuts a GitHub Release under the upstream package name, using the Rhino 8 `yak` CLI. The script
+Do not run `scripts/release.sh publish` from this fork: it builds a Yak package with the Rhino 8 `yak` CLI
+and pushes it under upstream's `cordyceps` package name, and it cuts a GitHub Release (which
+would land on this fork). The script
 and `docs/release-process.md` describe upstream's release flow and are kept only for upstream
 merges.
 
