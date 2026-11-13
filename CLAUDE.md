@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Cordyceps is a Grasshopper plugin that exposes Grasshopper and Rhino functionality via the Model Context Protocol (MCP). It allows AI assistants to programmatically control Grasshopper (adding components, creating connections, configuring scripts) and Rhino (managing objects, layers, materials, rendering).
+Cordyceps is a Grasshopper plugin that exposes Grasshopper functionality via the Model Context Protocol (MCP). It allows AI assistants to programmatically control Grasshopper (adding components, creating connections, configuring scripts). On this `rhino7-spike` branch the Rhino-side tools are removed; see `RHINO7-SPIKE.md`.
 
 ## Build Commands
 
@@ -15,7 +15,7 @@ dotnet build src/Cordyceps/Cordyceps.csproj -c Release
 # The built .gha file is automatically copied to releases/
 ```
 
-The project targets .NET 8.0 and outputs a Grasshopper plugin (`.gha` file). Debug builds are blocked—always use `-c Release`.
+The project targets .NET Framework 4.8 (`net48`, Rhino 7) and outputs a Grasshopper plugin (`.gha` file). Debug builds are blocked; always use `-c Release`.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ The project targets .NET 8.0 and outputs a Grasshopper plugin (`.gha` file). Deb
 
 **Core/GrasshopperContext.cs** - Thread-safe wrapper for Grasshopper document access. All Grasshopper operations must run on the UI thread; this class provides `ExecuteOnUiThread()` methods that marshal calls correctly.
 
-**Core/ComponentRegistry.cs** - Resolves component type names to actual Grasshopper components. Handles aliases (e.g., "python" -> "Python 3 Script") and supports creation by name or GUID.
+**Core/ComponentRegistry.cs** - Resolves component type names to actual Grasshopper components. Handles aliases (e.g., "python" -> "GhPython Script") and supports creation by name or GUID.
 
 **Core/UnifiedToolHelpers.cs** - Shared utilities for the unified tool architecture including action dispatch, help generation, and standardized response formatting.
 
@@ -39,9 +39,9 @@ The project targets .NET 8.0 and outputs a Grasshopper plugin (`.gha` file). Deb
 
 AI agents discover Cordyceps through a layered documentation system. All of these are user-facing and must be kept in sync with code changes:
 
-**McpServer.cs `GetServerInstructions()`** - The first thing agents see on MCP initialize. Lists all tools with their actions, key points, and resource links. Must be updated when actions are added/removed/renamed.
+**McpServer.cs `GetServerInstructions()`** - The first thing agents see on MCP initialize. Lists the tools with their actions, key points, and resource links. Must be updated when actions are added/removed/renamed. On this branch its tool list still includes the removed `rhino_scene` and `rhino_render` lines; that is a known defect, not a description of available tools.
 
-**Knowledge/ (Embedded Guides)** - Markdown guides served as MCP resources (`gh://docs/*`, `gh://patterns/*`). Covers getting started, data trees, type system, best practices, component patterns, canvas layout, geometry orientation, rendering, common errors, and MCP testing. Registered in `Resources/ResourceRegistry.cs`.
+**Knowledge/ (Embedded Guides)** - Markdown guides served as MCP resources (`gh://docs/*`, `gh://patterns/*`). Covers getting started, data trees, type system, best practices, component patterns, canvas layout, geometry orientation, rendering, common errors, and MCP testing. Registered in `Resources/ResourceRegistry.cs`. On this branch the rendering guide (`gh://docs/rendering`) and the `rhino_*` examples in `GettingStartedGuide.md` and `BestPracticesGuide.md` describe tools that are removed; do not follow them.
 
 **Tool Help Metadata (ActionInfo)** - Each tool class defines a `UnifiedToolInfo` with per-action metadata (description, required/optional params, example, tips). Accessed via `action='help'` on any tool. Must be updated when action signatures change.
 
@@ -59,10 +59,6 @@ Each tool class is marked with `[McpServerToolType]` and contains a single metho
 - **GhDocumentTool** (`gh_document`) - Save, clear documents; snapshots; solver control; capture canvas/viewport
 - **GhScriptTool** (`gh_script`) - Configure C#/Python script components
 - **GhInspectTool** (`gh_inspect`) - Get component status, trace data flow, retrieve debug output
-
-**Rhino Tools (2):**
-- **RhinoSceneTool** (`rhino_scene`) - Object management, selection, layers (full CRUD), visibility
-- **RhinoRenderTool** (`rhino_render`) - Display modes, camera, render settings, materials, environments
 
 ### Adding or Modifying Tools
 
@@ -112,42 +108,24 @@ After any code change, check each of these and update as needed:
 
 ## Dependencies
 
-- Grasshopper 8.0+ (Rhino 8)
+- Grasshopper 7 SDK (`7.13.21348.13001`, Rhino 7)
 - Newtonsoft.Json for JSON serialization
-- .NET 8.0
+- .NET Framework 4.8 (`net48`)
 
 ## Branch model & Publishing
 
-This repo uses **gitflow**: **`develop`** is the default/integration branch (features branch off it
-and merge back via `/prawduct:pr`); **`main`** is the release surface and is **strict-protected**
-(no direct pushes; a `develop → main` PR with the `build-test` check is required; no bypass).
+This fork's working branch is `rhino7-spike` (Rhino 7 / net48). `develop` and `main` carry
+upstream's Rhino 8 / .NET 8 code and the upstream gitflow; do not merge `rhino7-spike` into them.
 
-Releases publish to **both** GitHub (`Release vX.Y.Z` commit + tag on `main`, a published
-**GitHub Release** with the `.gha` attached, and the downloadable `releases/Cordyceps.gha`) and the
-**Yak** package manager. Because `main` rejects direct pushes, `scripts/release.sh` is a **two-step**
-flow around the release PR (branch protection guards branches, not tags, so the publish step pushes
-only the `vX.Y.Z` tag). Don't run the yak/gh commands by hand.
+This fork is **not** published to the Rhino Package Manager (Yak) (README.md, Installation). The
+Yak entry named "Cordyceps" is upstream's Rhino 8 build. A Release build copies the `.gha` into
+`releases/`, and `releases/Cordyceps.gha` committed on this branch is the distribution.
 
-```bash
-# Keep notes under a top `## [Unreleased]` in CHANGELOG.md; prep renames it. Then:
-
-# 1) prep — on develop: bump version + CHANGELOG, build .gha, commit, push, open develop->main PR
-git checkout develop && git pull
-./scripts/release.sh prep            # auto-increment patch (e.g. 1.4.12 -> 1.4.13)
-./scripts/release.sh prep 1.4.13     # or an explicit version
-
-# 2) merge the develop->main release PR (merge commit, after build-test passes)
-
-# 3) publish — on main: build/push yak, push the vX.Y.Z tag, create the GitHub Release
-git checkout main && git pull
-./scripts/release.sh publish 1.4.13
-
-# --dry-run previews either step without changing anything.
-```
-
-Prerequisites (dotnet, Rhino 8 for the yak CLI, yak login, `gh` authenticated), the post-release
-Prawduct bookkeeping (`status=merged → shipped` + `prawduct-hook regen-views`), and the full
-step-by-step flow are in [`docs/release-process.md`](docs/release-process.md).
+Do not run `scripts/release.sh publish` from this fork: it builds a Yak package with the Rhino 8 `yak` CLI
+and pushes it under upstream's `cordyceps` package name, and it cuts a GitHub Release (which
+would land on this fork). The script
+and `docs/release-process.md` describe upstream's release flow and are kept only for upstream
+merges.
 
 <!-- PRAWDUCT:ANCHOR — static governance pointer managed by the prawduct plugin. Keep it small and version-free: principles, methodology, and the active version live in the plugin and are injected at session start. -->
 
